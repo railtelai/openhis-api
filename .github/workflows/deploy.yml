@@ -1,0 +1,41 @@
+name: Backend CI/CD → Minikube (Production Ready)
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: SSH to GCP & deploy backend
+        uses: appleboy/ssh-action@v0.1.8
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd ~/his-backend || git clone '${{ secrets.REPO_SSH }}' ~/his-backend && cd ~/his-backend
+            git fetch --all && git reset --hard origin/main
+
+            # --- Create env + encryption keys ---
+            echo "${{ secrets.BACKEND_ENV }}" > .env
+            mkdir -p encryptionkeys
+            echo "${{ secrets.APP_PRIVATE_KEY }}" > encryptionkeys/private.pem
+            echo "${{ secrets.APP_PUBLIC_KEY }}" > encryptionkeys/public.pem
+            echo "${{ secrets.KEYCLOAK_PUBLIC_KEY }}" > encryptionkeys/keycloak-public.pem
+            echo "${{ secrets.REQUEST_PRIVATE_KEY }}" > encryptionkeys/request-private.pem
+            echo "${{ secrets.RESPONSE_PUBLIC_KEY }}" > encryptionkeys/response-public.pem
+
+            # --- Build & load Docker image ---
+            docker build -t his-backend:latest .
+            minikube image load his-backend:latest
+
+            # --- Deploy to Kubernetes ---
+            kubectl apply -f k8s/
+
+            # --- Wait & auto-rollback on failure ---
+            kubectl rollout status deployment/his-backend --timeout=120s || kubectl rollout undo deployment/his-backend

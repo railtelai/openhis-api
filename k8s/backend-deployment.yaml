@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: his-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: his-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: his-backend
+    spec:
+      containers:
+        - name: his-backend
+          image: his-backend:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 2001
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 2001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 2001
+            initialDelaySeconds: 30
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: his-backend
+spec:
+  type: ClusterIP
+  selector:
+    app: his-backend
+  ports:
+    - port: 2001
+      targetPort: 2001
